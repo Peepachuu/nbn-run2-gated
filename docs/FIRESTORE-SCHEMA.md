@@ -48,3 +48,32 @@ This enables **lazy migration** — when a document is read, check `_schemaVersi
 ---
 
 <!-- Add new collection schemas below using the /firebase-collection skill -->
+
+## `dispatchRequests` collection
+
+**Path:** `/dispatchRequests/{requestId}`
+**Access:** Server-only through authenticated Next.js Server Actions. Browser access remains denied
+by the default Firestore rule.
+
+| Field                | Type                                   | Required | Description                                    |
+| -------------------- | -------------------------------------- | -------- | ---------------------------------------------- |
+| `ownerId`            | `string`                               | Yes      | Verified Firebase session UID                  |
+| `premises`           | `string`                               | Yes      | Customer-premises description                  |
+| `fault`              | `{ id: string, name: string }`         | Yes      | Fault resolved from the trial fixture          |
+| `accessRequirement`  | `{ id: string, name: string }`         | Yes      | Access requirement resolved from the fixture   |
+| `status`             | `'matching' \| 'scheduled'`            | Yes      | Current request state                          |
+| `selectedTechnician` | `{ id: string, name: string } \| null` | Yes      | Compatible scheduled technician, when selected |
+| `matchedEquipment`   | `string[]`                             | Yes      | Equipment combination used for compatibility   |
+| `scheduledVisit`     | `Timestamp \| null`                    | Yes      | Scheduled visit time, when scheduled           |
+| `createdAt`          | `Timestamp`                            | Yes      | Request creation time                          |
+| `updatedAt`          | `Timestamp`                            | Yes      | Last request update time                       |
+| `_schemaVersion`     | `1`                                    | Yes      | Schema version                                 |
+
+**Creation:** `createDispatchRequest()` derives `ownerId` from the verified session and resolves
+fault and access fields from `fixtures/technicians.json`.
+
+**Scheduling:** `scheduleDispatch()` checks ownership, reloads the stored request, and recomputes
+fixture compatibility before recording the technician, equipment and visit.
+
+**Queries and indexes:** None. The scheduling action reads a known document ID, so no composite
+index is required.
