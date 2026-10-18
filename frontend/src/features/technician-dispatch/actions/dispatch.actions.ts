@@ -89,64 +89,68 @@ export async function scheduleDispatch(
 
   try {
     const document = adminDb.collection(dispatchCollection).doc(parsed.data.requestId)
-    const snapshot = await document.get()
-    const request = snapshot.exists
-      ? (snapshot.data() as StoredDispatchRequest | undefined)
-      : undefined
+    return await adminDb.runTransaction(
+      async (transaction): Promise<ActionResult<ScheduleDispatchData>> => {
+        const snapshot = await transaction.get(document)
+        const request = snapshot.exists
+          ? (snapshot.data() as StoredDispatchRequest | undefined)
+          : undefined
 
-    if (!request || request.ownerId !== session.uid) {
-      return { success: false, error: 'Dispatch request not found.' }
-    }
+        if (!request || request.ownerId !== session.uid) {
+          return { success: false, error: 'Dispatch request not found.' }
+        }
 
-    if (request.status === 'scheduled') {
-      return { success: false, error: 'This dispatch has already been scheduled.' }
-    }
+        if (request.status === 'scheduled') {
+          return { success: false, error: 'This dispatch has already been scheduled.' }
+        }
 
-    const fault = technicianCatalog.faults.find((item) => item.id === request.fault.id)
-    const accessRequirement = technicianCatalog.accessRequirements.find(
-      (item) => item.id === request.accessRequirement.id
-    )
-    const match = findCompatibleTechnicians(
-      request.fault.id,
-      request.accessRequirement.id,
-      technicianCatalog
-    ).find((item) => item.technician.id === parsed.data.technicianId)
+        const fault = technicianCatalog.faults.find((item) => item.id === request.fault.id)
+        const accessRequirement = technicianCatalog.accessRequirements.find(
+          (item) => item.id === request.accessRequirement.id
+        )
+        const match = findCompatibleTechnicians(
+          request.fault.id,
+          request.accessRequirement.id,
+          technicianCatalog
+        ).find((item) => item.technician.id === parsed.data.technicianId)
 
-    if (!fault || !accessRequirement || !match) {
-      return {
-        success: false,
-        error: 'The selected technician is not compatible with this request.',
-      }
-    }
+        if (!fault || !accessRequirement || !match) {
+          return {
+            success: false,
+            error: 'The selected technician is not compatible with this request.',
+          }
+        }
 
-    const scheduledVisit = new Date(parsed.data.scheduledVisit)
-    const selectedTechnician = {
-      id: match.technician.id,
-      name: match.technician.name,
-    }
+        const scheduledVisit = new Date(parsed.data.scheduledVisit)
+        const selectedTechnician = {
+          id: match.technician.id,
+          name: match.technician.name,
+        }
 
-    await document.update({
-      status: 'scheduled',
-      selectedTechnician,
-      matchedEquipment: match.matchedEquipment,
-      scheduledVisit,
-      updatedAt: new Date(),
-    })
-
-    return {
-      success: true,
-      data: {
-        dispatch: {
-          id: snapshot.id,
-          premises: request.premises,
-          fault: { id: fault.id, name: fault.name },
-          accessRequirement: { id: accessRequirement.id, name: accessRequirement.name },
-          technician: selectedTechnician,
+        transaction.update(document, {
+          status: 'scheduled',
+          selectedTechnician,
           matchedEquipment: match.matchedEquipment,
-          scheduledVisit: scheduledVisit.toISOString(),
-        },
-      },
-    }
+          scheduledVisit,
+          updatedAt: new Date(),
+        })
+
+        return {
+          success: true,
+          data: {
+            dispatch: {
+              id: snapshot.id,
+              premises: request.premises,
+              fault: { id: fault.id, name: fault.name },
+              accessRequirement: { id: accessRequirement.id, name: accessRequirement.name },
+              technician: selectedTechnician,
+              matchedEquipment: match.matchedEquipment,
+              scheduledVisit: scheduledVisit.toISOString(),
+            },
+          },
+        }
+      }
+    )
   } catch {
     return {
       success: false,

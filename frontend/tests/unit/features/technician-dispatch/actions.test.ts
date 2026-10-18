@@ -5,15 +5,17 @@ const mocks = vi.hoisted(() => {
   const add = vi.fn()
   const get = vi.fn()
   const update = vi.fn()
-  const doc = vi.fn(() => ({ get, update }))
+  const transaction = { get, update }
+  const runTransaction = vi.fn()
+  const doc = vi.fn(() => ({ id: 'dispatch-1' }))
   const collection = vi.fn(() => ({ add, doc }))
 
-  return { requireAuth, add, get, update, doc, collection }
+  return { requireAuth, add, get, update, transaction, runTransaction, doc, collection }
 })
 
 vi.mock('@/actions/auth.actions', () => ({ requireAuth: mocks.requireAuth }))
 vi.mock('@/lib/firebase/admin', () => ({
-  adminDb: { collection: mocks.collection },
+  adminDb: { collection: mocks.collection, runTransaction: mocks.runTransaction },
 }))
 
 import {
@@ -48,6 +50,10 @@ describe('technician dispatch server actions', () => {
     mocks.add.mockResolvedValue({ id: 'dispatch-1' })
     mocks.get.mockResolvedValue({ exists: true, id: 'dispatch-1', data: () => storedRequest })
     mocks.update.mockResolvedValue(undefined)
+    mocks.runTransaction.mockImplementation(
+      async (callback: (transaction: typeof mocks.transaction) => unknown) =>
+        callback(mocks.transaction)
+    )
   })
 
   it('T2-AC01 to T2-AC05: authenticates, derives ownership, stores the request, and returns valid matches', async () => {
@@ -128,7 +134,10 @@ describe('technician dispatch server actions', () => {
     })
 
     expect(mocks.doc).toHaveBeenCalledWith('dispatch-1')
+    expect(mocks.runTransaction).toHaveBeenCalledOnce()
+    expect(mocks.get).toHaveBeenCalledWith(expect.objectContaining({ id: 'dispatch-1' }))
     expect(mocks.update).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'dispatch-1' }),
       expect.objectContaining({
         status: 'scheduled',
         selectedTechnician: { id: 'T1', name: 'Tech Alpha' },
@@ -213,8 +222,33 @@ describe('technician dispatch server actions', () => {
     expect(mocks.update).not.toHaveBeenCalled()
   })
 
+  it('rechecks the request state when Firestore retries a conflicting schedule transaction', async () => {
+    mocks.get
+      .mockResolvedValueOnce({ exists: true, id: 'dispatch-1', data: () => storedRequest })
+      .mockResolvedValueOnce({
+        exists: true,
+        id: 'dispatch-1',
+        data: () => ({ ...storedRequest, status: 'scheduled' }),
+      })
+    mocks.runTransaction.mockImplementationOnce(
+      async (callback: (transaction: typeof mocks.transaction) => unknown) => {
+        await callback(mocks.transaction)
+        return callback(mocks.transaction)
+      }
+    )
+
+    const result = await scheduleDispatch({
+      requestId: 'dispatch-1',
+      technicianId: 'T1',
+      scheduledVisit: '2030-02-01T10:30:00.000Z',
+    })
+
+    expect(mocks.get).toHaveBeenCalledTimes(2)
+    expect(result).toEqual({ success: false, error: 'This dispatch has already been scheduled.' })
+  })
+
   it('returns a safe error when scheduling storage fails', async () => {
-    mocks.update.mockRejectedValueOnce(new Error('sensitive Firestore failure'))
+    mocks.runTransaction.mockRejectedValueOnce(new Error('sensitive Firestore failure'))
 
     const result = await scheduleDispatch({
       requestId: 'dispatch-1',

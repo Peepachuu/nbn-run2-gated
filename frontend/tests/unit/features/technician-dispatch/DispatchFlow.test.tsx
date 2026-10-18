@@ -157,7 +157,7 @@ describe('DispatchFlow', () => {
     )
   })
 
-  it('T2-AC13: uses native keyboard controls for the complete dispatch flow', async () => {
+  it('T2-AC13: keeps every dispatch control in keyboard order and supports keyboard activation', async () => {
     const user = userEvent.setup()
     render(<DispatchFlow catalog={catalog} />)
 
@@ -182,6 +182,9 @@ describe('DispatchFlow', () => {
     await user.tab()
     const scheduledVisit = screen.getByLabelText('Scheduled visit')
     expect(scheduledVisit).toHaveFocus()
+    expect(scheduledVisit).toHaveAttribute('type', 'datetime-local')
+    // jsdom cannot emulate segmented keyboard editing for datetime-local. The
+    // complete native-control interaction is verified in the preview evidence.
     fireEvent.change(scheduledVisit, { target: { value: '2030-02-01T10:30' } })
     await user.tab()
     expect(screen.getByRole('button', { name: 'Schedule dispatch' })).toHaveFocus()
