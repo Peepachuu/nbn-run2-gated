@@ -1,0 +1,23 @@
+$ pnpm run test && pnpm run test:component
+$ pnpm --filter backend test
+$ vitest run tests/unit
+
+ RUN  v4.1.11 /Users/zafirhasan/Uni/ProgrammingProject/nbn-run2-gated/backend
+
+
+ Test Files  2 passed (2)
+      Tests  5 passed (5)
+   Start at  15:05:16
+   Duration  213ms (transform 33ms, setup 17ms, import 76ms, tests 14ms, environment 0ms)
+
+$ pnpm --filter frontend test
+$ vitest run
+
+ RUN  v4.1.11 /Users/zafirhasan/Uni/ProgrammingProject/nbn-run2-gated/frontend
+
+
+ Test Files  5 passed (5)
+      Tests  42 passed (42)
+   Start at  15:05:16
+   Duration  1.12s (transform 197ms, setup 514ms, import 270ms, tests 561ms, environment 1.39s)
+
